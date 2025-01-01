@@ -1,0 +1,6 @@
+Changes
+Makefile.PL
+MANIFEST
+README.md
+t/Cyrillium.t
+lib/Cyrillium.pm
