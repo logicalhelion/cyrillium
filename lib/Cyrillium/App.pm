@@ -4,7 +4,7 @@ use Data::Dumper;
 use CGI::Fast;
 use CGI::Carp qw(croak);
 
-package Cyrillium::App 0.010131 {
+package Cyrillium::App 0.010161 {
 
     use parent qw(CGI::Application);
 
@@ -36,30 +36,37 @@ package Cyrillium::App 0.010131 {
         my $class = shift;
         my %params = @_;
 
-        # install callbacks for init and load_tmpl phase
-        # $class->app_callback('init','cyrillium_init');
-        # $class->app_callback('load_tmpl','cyrillium_load_tmpl'); 
-        #print STDERR "ROUTES TO PREP:\n", Dumper($class->ROUTES);
+        # install callback for load_tmpl phase
+        $class->add_callback('load_tmpl','_load_tmpl_template_defaults'); 
 
-        if ( defined $class->ROUTES  ) {
-            #print STDERR "REGISTERING _path_info_routing CALLBACK\n"; 
+        if ( defined $class->Routes  ) {
             $class->add_callback('prerun','_prerun_path_info_routing');
         }
 
         # add PSGI-like postrun output handling
-        if ( defined $class->ARRAYREF_RESPONSES && $class->ARRAYREF_RESPONSES > 0 ) {
+        if ( defined $class->ArrayrefResponses && $class->ArrayrefResponses > 0 ) {
             $class->add_callback('postrun','_postrun_response');
         }
 
         return 1;
     }
 
-    # define the primitives apps will redefine later
-    sub RUN_MODES { undef }
-    sub DEFAULT_MODE { 'http_404_not_found' }
-    sub ERROR_HANDLER { 'error_response' }
-    sub ROUTES { undef }
-    sub ARRAYREF_RESPONSES { 1 }
+    # define the primitive methods apps can redefine later
+    sub RunModes { undef }
+    sub DefaultHandler { 'http_404' }
+    sub ErrorHandler { 'error_response' }
+    sub TemplateDefaults { 
+        return {
+            cache             => 1,
+            default_escape    => 'html',
+            die_on_bad_params => 0,
+            loop_context_vars => 1,
+            path              => 'templates',
+        }
+    }
+
+    sub Routes { undef }
+    sub ArrayrefResponses { 1 }
 
     ## OBJECT METHODS ##
 
@@ -71,15 +78,15 @@ package Cyrillium::App 0.010131 {
         my $self = shift;
 
         # set some defaults
-        my $runmodes   = $self->RUN_MODES   // ['http_404_not_found','error_response'];
-        my $start_mode = $self->DEFAULT_MODE;
-        my $error_mode = $self->ERROR_HANDLER;
+        my $runmodes   = $self->RunModes   // ['http_404','error_response'];
+        my $start_mode = $self->DefaultHandler;
+        my $error_mode = $self->ErrorHandler;
 
         # pull all the routes' run_modes and add them to the run_modes() list
         my @route_run_modes;
-        if (defined $self->ROUTES) {
+        if (defined $self->Routes) {
             my %run_mode_hash;
-            my @route_info = values %{ $self->ROUTES };
+            my @route_info = values %{ $self->Routes };
             for my $route (@route_info) {
                 my @run_modes = values %$route;
                 for (@run_modes) {
@@ -98,7 +105,7 @@ package Cyrillium::App 0.010131 {
         print STDERR "START MODE: ",$start_mode,"\n" if $self->debug;
         print STDERR "ERROR MODE: ",$error_mode,"\n" if $self->debug;
 
-        $self->mode_param(1);  # this won't be used if ROUTES is defined
+        $self->mode_param(1);  # this won't be used if Routes is defined
         $self->run_modes( $runmodes );
         $self->start_mode( $start_mode );
         $self->error_mode( $error_mode );
@@ -106,12 +113,26 @@ package Cyrillium::App 0.010131 {
 
     ## CALLBACKS ##
 
+    sub _load_tmpl_template_defaults {
+        my $self      = shift;
+        my $ht_params = shift;
+    
+        my $defaults = $self->TemplateDefaults;
+    
+        # first, load the default tmpl options into a new hash
+        foreach (keys %$defaults) {
+            if (!exists $ht_params->{$_}) {
+                $ht_params->{$_} = $defaults->{$_};
+            }
+        }
+    }
+
     ##
     # _prerun_path_info_routing()
     # routes request based on path_info
     sub _prerun_path_info_routing {
         my $self   = shift;
-        my $routes = $self->ROUTES;
+        my $routes = $self->Routes;
         my $q      = $self->query;
         my $path_info      = $q->path_info;
         my $request_method = $q->request_method;
@@ -249,7 +270,7 @@ package Cyrillium::App 0.010131 {
         return %params;
     }
 
-    ## DEFAULT RUN_MODES ##
+    ## DEFAULT RUNMODES ##
 
     ##
     # error_response
@@ -273,11 +294,11 @@ package Cyrillium::App 0.010131 {
     }
 
     ##
-    # http_404_not_found
+    # http_404
     # default run mode 
     # if path info routing doesn't find a route,
     # this will return a 404 Not Found error
-    sub http_404_not_found {
+    sub http_404 {
         return [
             '404 Not Found',
             [
@@ -294,6 +315,29 @@ package Cyrillium::App 0.010131 {
             }
         ];
     }
+
+
+    sub http_405 {
+        return [
+            '405 Method Not Allowed',
+            [
+                -type => 'text/html; charset=utf-8',
+            ],
+            qq{
+<!doctype html>
+<html lang="en">
+    <head><title>Method Not Allowed</title></head>
+<body>
+    <h1>Method Not Allowed</h1>
+</body>
+</html>
+            }
+        ];
+    }
+
+
+
+
 }
 1;
 __END__
