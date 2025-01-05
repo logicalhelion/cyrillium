@@ -1,15 +1,15 @@
 use v5.38;
-use Data::Dumper;
 
 use CGI::Fast;
-use CGI::Carp qw(croak);
 
-package Cyrillium::App 0.010161 {
-
+package Cyrillium::App 0.010162 {
     use parent qw(CGI::Application);
+
+    use CGI::Carp qw(croak);
 
     use Class::Tiny qw(
         _matched_route
+        _matched_method
     ),
     {
         debug => sub { 0 },
@@ -53,7 +53,7 @@ package Cyrillium::App 0.010161 {
 
     # define the primitive methods apps can redefine later
     sub RunModes { undef }
-    sub DefaultHandler { 'http_404' }
+    sub DefaultHandler { 'home' }
     sub ErrorHandler { 'error_response' }
     sub TemplateDefaults { 
         return {
@@ -78,7 +78,7 @@ package Cyrillium::App 0.010161 {
         my $self = shift;
 
         # set some defaults
-        my $runmodes   = $self->RunModes   // ['http_404','error_response'];
+        my $runmodes   = $self->RunModes   // ['http_404','http_405','error_response'];
         my $start_mode = $self->DefaultHandler;
         my $error_mode = $self->ErrorHandler;
 
@@ -93,17 +93,14 @@ package Cyrillium::App 0.010161 {
                     $run_mode_hash{$_} = 1;
                 }
             }
+            # add the default run modes
+            for (@$runmodes) { $run_mode_hash{$_} = 1; }
             # make sure start and error modes are in the run modes array
             $run_mode_hash{$start_mode} = 1;
             $run_mode_hash{$error_mode} = 1;
             @route_run_modes = keys %run_mode_hash;
             $runmodes = \@route_run_modes;
         }
-
-        #FIXME:test
-        print STDERR "RUN_MODES: ",Dumper($runmodes),"\n" if $self->debug;
-        print STDERR "START MODE: ",$start_mode,"\n" if $self->debug;
-        print STDERR "ERROR MODE: ",$error_mode,"\n" if $self->debug;
 
         $self->mode_param(1);  # this won't be used if Routes is defined
         $self->run_modes( $runmodes );
@@ -137,6 +134,8 @@ package Cyrillium::App 0.010161 {
         my $path_info      = $q->path_info;
         my $request_method = $q->request_method;
         my $run_mode;
+        my $matched_route = '';
+        my $matched_method = '';
 
         if ( defined $routes && defined $path_info) {
             # ok we have routes, compare the routes to path_info
@@ -187,11 +186,14 @@ package Cyrillium::App 0.010161 {
                 # ok, if this route matched, is the HTTP method valid for this route?
                 if ($matched) {
                     print STDERR "ROUTE MATCHED: ",$route,"\n" if $self->debug;
+                    $matched_route = $route;
                     foreach my $method (keys %{ $routes->{$route} }){
                         if ($method eq $request_method) {
                             # OK, we have a match on route & HTTP method
                             # set the run mode and we're done!
                             $self->_matched_route($route);
+                            $self->_matched_method($method);
+                            $matched_method = $method;
                             $run_mode = $routes->{$route}->{$method};
                             last;
                         }
@@ -200,17 +202,26 @@ package Cyrillium::App 0.010161 {
                 # if we have a run mode, we can stop searching for a matching route
                 last if $run_mode;
             }
-            # we've run through all the routes
+            # we've run through all the routes (at least until we found a match)
             # we either have a run_mode to set
-            # or we're issuing a 404 Not Found because no routes matched
-            # #FIXME:or keep track of route match/method mismatch so we can do a 405?
+            # or we're issuing a 404 or 405 no routes+methods matched
+            #
             if (defined $run_mode) {
                 $self->prerun_mode($run_mode);
             }
-            # we couldn't find a route, so we'll default to the start mode
-            # default start mode will respond with a 404
+            elsif ($matched_route && !$matched_method) {
+                # we couldn't find a matching route+method combo
+                # if we matched a route but not a method, we'll return a 405
+                # if we didn't find a matching route, we'll return a 404
+                $self->prerun_mode('http_405');
+            }
+            else {
+                # we can't match a method and NOT match a route
+                # so if we're here, neither the route or method matched
+                $self->prerun_mode('http_404');
+            }
         }
-        # if we don't have any ROUTES or any path_info,
+        # if we don't have any defined Routes or any path_info,
         # we don't do *anything at all*
     }
 
@@ -295,7 +306,6 @@ package Cyrillium::App 0.010161 {
 
     ##
     # http_404
-    # default run mode 
     # if path info routing doesn't find a route,
     # this will return a 404 Not Found error
     sub http_404 {
@@ -316,7 +326,10 @@ package Cyrillium::App 0.010161 {
         ];
     }
 
-
+    ##
+    # http_405
+    # if we found a route but the method doesn't match
+    # this will return a 405 Method Not Allowed
     sub http_405 {
         return [
             '405 Method Not Allowed',
@@ -329,6 +342,27 @@ package Cyrillium::App 0.010161 {
     <head><title>Method Not Allowed</title></head>
 <body>
     <h1>Method Not Allowed</h1>
+</body>
+</html>
+            }
+        ];
+    }
+
+    ##
+    # default run mode 
+    #
+    sub home {
+        return [
+            '200 OK',
+            [
+                -type => 'text/html; charset=utf-8',
+            ],
+            qq{
+<!doctype html>
+<html lang="en">
+    <head><title>Home</title></head>
+<body>
+    <h1>Hello World!</h1>
 </body>
 </html>
             }

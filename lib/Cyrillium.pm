@@ -3,7 +3,7 @@ package Cyrillium;
 use 5.038002;
 use warnings;
 
-our $VERSION = '0.01_0131';
+our $VERSION = '0.01_0162';
 
 1;
 __END__
