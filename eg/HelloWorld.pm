@@ -4,7 +4,7 @@ use Cyrillium::App;
 package HelloWorld {
     use parent 'Cyrillium::App';
 
-    sub ROUTES {
+    sub Routes {
         return {
             '/' => { 'GET' => 'hello_world' },
         }
