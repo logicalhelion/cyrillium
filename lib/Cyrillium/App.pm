@@ -2,7 +2,7 @@ use v5.38;
 
 use CGI::Fast;
 
-package Cyrillium::App 0.010162 {
+package Cyrillium::App 0.010271 {
     use parent qw(CGI::Application);
 
     use CGI::Carp qw(croak);
@@ -188,12 +188,12 @@ package Cyrillium::App 0.010162 {
                     print STDERR "ROUTE MATCHED: ",$route,"\n" if $self->debug;
                     $matched_route = $route;
                     foreach my $method (keys %{ $routes->{$route} }){
-                        if ($method eq $request_method) {
+                        if ($method eq $request_method || $method eq '*') {
                             # OK, we have a match on route & HTTP method
                             # set the run mode and we're done!
                             $self->_matched_route($route);
-                            $self->_matched_method($method);
-                            $matched_method = $method;
+                            $self->_matched_method($request_method);
+                            $matched_method = $request_method;
                             $run_mode = $routes->{$route}->{$method};
                             last;
                         }
