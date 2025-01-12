@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-use lib qw(. ../lib);
+use lib qw(.);
 use HelloWorld;
 
 ##
